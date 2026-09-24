@@ -60,6 +60,30 @@
       box-shadow: 0 4px 0 #ff9f43;
     }
 
+    .top3-board {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.95);
+      border: 3px solid #feca57;
+      border-radius: 20px;
+      padding: 6px 20px;
+      display: flex;
+      gap: 20px;
+      z-index: 10;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      font-size: clamp(0.8rem, 1.2vw, 1rem);
+      font-weight: 900;
+      color: #576574;
+      pointer-events: none;
+    }
+    .top3-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .track-section {
       background: #fff;
       border-radius: 20px;
@@ -293,6 +317,7 @@
   </header>
 
   <div class="track-section">
+    <div id="leaderboard" class="top3-board" style="display: none;"></div>
     <canvas id="trackCanvas"></canvas>
   </div>
 
@@ -506,7 +531,8 @@
 
   const rawQuestions = [
     "1/2 + 1/3", "3/4 - 1/6", "2/5 + 1/4", "5/8 - 1/2", "5/6 + 1/4", "7/8 - 1/4", "3/5 + 2/3", "9/10 - 1/4",
-    "1_1/2 + 1/3", "2_1/4 + 1_1/3", "3_1/2 - 1_1/4", "2_1/5 - 1/2", "1_3/4 - 5/6", "3_1/3 - 1_1/2", "1/6 + 3/8", "3/4 + 5/6"
+    "1_1/2 + 1/3", "2_1/4 + 1_1/3", "3_1/2 - 1_1/4", "2_1/5 - 1/2", "1_3/4 - 5/6", "3_1/3 - 1_1/2", "1/6 + 3/8", "3/4 + 5/6",
+    "3 - 1/2", "2 - 3/4", "5 - 1_1/3", "4 - 5/6", "6 - 2_3/8", "3 - 1_1/2", "7 - 2/5"
   ];
 
   const carImages = [
@@ -742,10 +768,11 @@
   }
 
   function createPlayerObj(id, name, color, img) {
+      // 統一調整初始 Y 偏移量
       return { 
         id: id, name: name, color: color, img: img, 
         dist: 0, visualDist: 0, qIdx: Math.floor(Math.random() * rawQuestions.length), 
-        yOffset: (id * 18) - 25, finished: false, rank: 0, 
+        yOffset: (id * 18) - 25 - 3, finished: false, rank: 0, 
         tokens: [], pastLines: [], stepState: 'SELECT', expectedAns: {n:0,d:1}, 
         leftBound: -1, rightBound: -1, inputData: {}, activeField: 'w', currentOp: '', origA: null, origB: null 
       };
@@ -874,7 +901,7 @@
           let span = document.createElement('span'); span.className = 'op-btn'; span.innerText = t;
           span.onclick = () => handleOpClick(pId, idx); currentLineDiv.appendChild(span);
         } else { currentLineDiv.appendChild(renderToken(t)); }
-      } else if (p.stepState === 'INPUT_FINAL' || p.stepState === 'INPUT_COMMON' || p.stepState === 'INPUT_BORROW') {
+      } else if (p.stepState === 'INPUT_FINAL' || p.stepState === 'INPUT_COMMON' || p.stepState === 'INPUT_BORROW' || p.stepState === 'INPUT_INT_TO_FRAC') {
         if (idx >= p.leftBound && idx <= p.rightBound) {
           if (idx === p.leftBound) {
             if (p.stepState === 'INPUT_COMMON') currentLineDiv.appendChild(createCommonDenomInput(pId, p.currentOp));
@@ -899,7 +926,19 @@
       let a = parseFraction(p.tokens[p.leftBound]), b = parseFraction(p.tokens[p.rightBound]), op = p.tokens[idx];
       if (op === '+') p.expectedAns = addFrac(a, b); else if (op === '-') p.expectedAns = subFrac(a, b);
 
-      if (a.d !== b.d) {
+      let p1Str = p.tokens[p.leftBound];
+      let p2Str = p.tokens[p.rightBound];
+      
+      if (op === '-' && !p1Str.includes('/') && p2Str.includes('/')) {
+        p.stepState = 'INPUT_INT_TO_FRAC'; 
+        p.inputData = { w: '', n: '', d: '' }; 
+        p.activeField = 'w';
+        p.targetInt = parseInt(p1Str);
+        p.targetDenom = parseMixed(p2Str).d;
+        p.rightBound = p.leftBound;
+        fb.innerText = "💡 整數減分數！請先將整數轉換成同分母的分數 👉"; 
+        fb.className = "p-feedback correct";
+      } else if (a.d !== b.d) {
         p.stepState = 'INPUT_COMMON'; p.inputData = { '1_w': '', '1_n': '', '1_d': '', '2_w': '', '2_n': '', '2_d': '' };
         p.activeField = '1_n'; p.currentOp = op; p.origA = a; p.origB = b;
         fb.innerText = "✅ 正確！請擴分找出公分母 👉"; fb.className = "p-feedback correct";
@@ -928,7 +967,7 @@
     if (p.stepState === 'INPUT_COMMON') {
       const seq = ['1_w', '1_n', '1_d', '2_w', '2_n', '2_d'];
       p.activeField = seq[(seq.indexOf(p.activeField) + 1) % seq.length];
-    } else if (p.stepState === 'INPUT_FINAL' || p.stepState === 'INPUT_BORROW') {
+    } else if (p.stepState === 'INPUT_FINAL' || p.stepState === 'INPUT_BORROW' || p.stepState === 'INPUT_INT_TO_FRAC') {
       const seq = ['w', 'n', 'd'];
       p.activeField = seq[(seq.indexOf(p.activeField) + 1) % seq.length];
     } else return;
@@ -938,7 +977,7 @@
   function press(pId, key) {
     if (!gameActive) return;
     let p = players.find(x=>x.id===pId);
-    if (p.finished || (p.stepState !== 'INPUT_FINAL' && p.stepState !== 'INPUT_COMMON' && p.stepState !== 'INPUT_BORROW')) return;
+    if (p.finished || (p.stepState !== 'INPUT_FINAL' && p.stepState !== 'INPUT_COMMON' && p.stepState !== 'INPUT_BORROW' && p.stepState !== 'INPUT_INT_TO_FRAC')) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
     if (key === 'DEL') p.inputData[p.activeField] = p.inputData[p.activeField].slice(0, -1);
@@ -986,6 +1025,37 @@
         if (!isCommon) fb.innerText = "❌ 兩個分母必須相同！";
         else if (!isEq1 || !isEq2) fb.innerText = "❌ 擴分算錯了！";
         else fb.innerText = "❌ 數字填寫有誤！";
+      }
+      return;
+    }
+
+    if (p.stepState === 'INPUT_INT_TO_FRAC') {
+      let wStr = p.inputData.w, nStr = p.inputData.n, dStr = p.inputData.d;
+      let w = parseInt(wStr) || 0, n = parseInt(nStr) || 0, d = parseInt(dStr) || 0;
+      if (n > 0 && d === 0) { playSound('wrong'); fb.className="p-feedback wrong"; fb.innerText="❌ 記得寫分母！"; return; }
+      if (d === 0) d = 1;
+
+      let userVal = { n: w * d + n, d: d };
+      let targetVal = { n: p.targetInt * p.targetDenom, d: p.targetDenom };
+      
+      let isValueCorrect = (userVal.n * targetVal.d === targetVal.n * userVal.d);
+      let isDenomMatch = (d === p.targetDenom);
+
+      if (isValueCorrect && isDenomMatch) {
+          playSound('correct'); 
+          p.tokens.splice(p.leftBound, 1, buildStr(w, n, d)); 
+          p.pastLines.push([...p.tokens]);
+          p.stepState = 'INPUT_FINAL'; 
+          p.inputData = { w: '', n: '', d: '' }; 
+          p.activeField = 'w'; 
+          p.rightBound = p.leftBound + 2; 
+          fb.className = "p-feedback correct"; 
+          fb.innerText = "🌟 轉換成功！請計算最後答案 👉"; 
+          renderEquation(pId);
+      } else {
+          playSound('wrong'); fb.className = "p-feedback wrong"; 
+          if (!isDenomMatch) fb.innerText = `❌ 分母必須與右邊相同 (為 ${p.targetDenom})！`;
+          else fb.innerText = "❌ 數值錯誤！例如 3 可換成 2 又 4/4";
       }
       return;
     }
@@ -1100,11 +1170,22 @@
           tCtx.fillStyle = (r % 2 === 0) ? "#333" : "#fff"; tCtx.fillRect(finishX + 20, ySquare, 20, (h-40)/5);
         }
     } else {
-        trackMaxDist = 10; 
-        if (players[0] && players[0].visualDist > 8) {
-            startDist = players[0].visualDist - 8;
-        }
+        // 修改單人模式馬路長度為 15m
+        trackMaxDist = 15; 
         
+        // 找出所有車輛中跑最遠的距離 (第一名)
+        let maxVisualDist = players[0] ? players[0].visualDist : 0;
+        singleTrackOpponents.forEach(opp => {
+            if (opp.visualDist > maxVisualDist) {
+                maxVisualDist = opp.visualDist;
+            }
+        });
+
+        // 讓第一名始終保持在畫面最右側 (距離右邊界僅留 0.5m 的相對位置)，增加成就感！
+        if (maxVisualDist > (trackMaxDist - 0.5)) {
+             startDist = maxVisualDist - (trackMaxDist - 0.5);
+        }
+
         tCtx.fillStyle = "rgba(0,0,0,0.5)";
         tCtx.font = "900 15px Nunito";
         tCtx.fillText(`◀ ${Math.floor(startDist)}m`, 20, 25);
@@ -1126,6 +1207,14 @@
 
     if (gameMode === 'MULTI') {
         renderList = players;
+        // 動態計算 yOffset，平均分佈在 4 條車道上，確保車子在馬路範圍內
+        players.forEach((p, i) => {
+            let laneHeight = (h - 40) / 4;
+            // 每一條車道的底部 Y 座標，稍微向上偏移 (-5) 來置中車輛
+            let laneBottom = 30 + (i + 1) * laneHeight - 5; 
+            // 覆寫玩家的 Y 軸偏移量
+            p.yOffset = laneBottom - carH + 5 - baseCenterY;
+        });
     } else if (gameMode === 'SINGLE') {
         let allCars = [...singleTrackOpponents];
         if(!allCars.find(c => c.isMe)) {
@@ -1133,7 +1222,8 @@
                 name: `${currentUser.classStr} ${currentUser.nameStr}`,
                 dist: players[0].dist,
                 img: players[0].img,
-                yOffset: 0,
+                // 單人模式玩家Y座標再次 -10 變成 -23
+                yOffset: -23, 
                 isMe: true
             });
         }
@@ -1142,10 +1232,10 @@
         renderList = allCars.map((c, i) => {
             if (c.isMe) {
                 players[0].targetTrackDist = c.dist;
-                players[0].yOffset = 0; 
+                players[0].yOffset = -23; 
                 return players[0];
             } else {
-                const newYOffset = (opponentCount % 2 === 0) ? -28 : 28;
+                const newYOffset = (opponentCount % 2 === 0) ? -51 : 5;
                 opponentCount++;
                 return {
                     isOpponent: true, name: c.name, dist: c.dist, visualDist: c.dist, 
@@ -1153,6 +1243,31 @@
                 }
             }
         });
+    }
+
+    // 更新排行榜 (單人與多人模式共用)
+    let lbDiv = document.getElementById('leaderboard');
+    if (renderList.length > 0) {
+        lbDiv.style.display = 'flex';
+        // 抓出前三名
+        let sortedForLb = [...renderList].sort((a, b) => b.visualDist - a.visualDist).slice(0, 3);
+        const medals = ['🥇', '🥈', '🥉'];
+        let html = '';
+        
+        // 將前三名的陣列反轉，變成 [第3名, 第2名, 第1名]
+        sortedForLb.reverse().forEach((r, reversedIdx) => {
+            let rName = r.name;
+            if (gameMode === 'SINGLE' && !r.isOpponent) rName = "⭐ 我 ⭐";
+            
+            // 計算原本的排名 (0=第一, 1=第二, 2=第三)
+            // 反轉後長度為 n，則原本的 index = n - 1 - reversedIdx
+            let originalIdx = sortedForLb.length - 1 - reversedIdx;
+            
+            html += `<div class="top3-item"><span style="font-size:1.2rem;">${medals[originalIdx]}</span> ${rName} (${Math.floor(r.visualDist)}m)</div>`;
+        });
+        lbDiv.innerHTML = html;
+    } else {
+        lbDiv.style.display = 'none';
     }
 
     let sortedList = [...renderList].sort((a, b) => a.yOffset - b.yOffset);
