@@ -398,7 +398,7 @@
     <div class="modal-content">
       <h2>🏁 遊戲模式選擇</h2>
       <p style="color: #576574; font-weight: bold; margin-bottom: 10px;">請選擇您要進行的遊戲模式</p>
-      <button class="btn-large" onclick="openLoginModal()">👤 單人模式</button>
+      <button class="btn-large" onclick="checkConnectionAndOpenLogin()">👤 單人模式</button>
       <button class="btn-large secondary" onclick="startMultiplayer()">👥 四人同機競賽</button>
       <div style="font-size: 0.8rem; color: #a4b0be; margin-top: 10px;">
         1. 點擊算式符號擴分<br>2. 借位處理<br>3. 輸入最簡分數或帶分數
@@ -569,7 +569,7 @@
   }
   window.addEventListener('resize', resizeCanvas);
 
-  async function gas_fetch(payload) {
+  async function gas_fetch(payload, allowFallback = true) {
       try {
           let res = await fetch(GAS_URL, {
               method: 'POST',
@@ -581,8 +581,13 @@
           if (result && result.error && result.error !== 'Not found') throw new Error(result.error);
           return result;
       } catch(e) {
-          console.warn("⚠️ GAS 伺服器連線異常，已自動切換至本機備用資料庫 (LocalStorage)", e);
-          return local_mock_db(payload);
+          console.warn("⚠️ GAS 伺服器連線異常", e);
+          if (allowFallback) {
+              console.warn("自動切換至本機備用資料庫 (LocalStorage)");
+              return local_mock_db(payload);
+          } else {
+              return { networkError: true };
+          }
       }
   }
 
@@ -627,6 +632,33 @@
       return result.toUpperCase();
   }
 
+  async function checkConnectionAndOpenLogin() {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const btn = document.querySelector('button[onclick="checkConnectionAndOpenLogin()"]');
+    const origText = btn.innerText;
+    btn.innerText = "🔗 連線資料庫中 ⏳...";
+    btn.disabled = true;
+
+    // 關閉 allowFallback (第二個參數傳入 false)，強制要求必須連上 GAS
+    let test = await gas_fetch({action: 'GET_TRACK'}, false);
+    
+    if (test && test.networkError) {
+        btn.innerText = "❌ 連線失敗，請檢查網路";
+        btn.style.background = "#ff6b6b";
+        btn.style.boxShadow = "0 5px 0 #ee5253";
+        setTimeout(() => {
+            btn.innerText = origText;
+            btn.disabled = false;
+            btn.style.background = "";
+            btn.style.boxShadow = "";
+        }, 3000);
+    } else {
+        btn.innerText = origText;
+        btn.disabled = false;
+        openLoginModal();
+    }
+  }
+
   function openLoginModal() {
     if(audioCtx.state === 'suspended') audioCtx.resume();
     document.getElementById('menu-modal').style.display = 'none';
@@ -656,12 +688,15 @@
     btn.disabled = true;
     btn.innerText = "連線中 ⏳...";
     
-    let data = await gas_fetch({action: 'LOGIN', classStr: tempClass, nameStr: tempName});
+    // 登入階段也關閉自動備用資料庫，確保一定能連上 EXCEL
+    let data = await gas_fetch({action: 'LOGIN', classStr: tempClass, nameStr: tempName}, false);
     
     btn.disabled = false;
     btn.innerText = "確認登入 🚀";
     
-    if (data && !data.error) {
+    if (data && data.networkError) {
+        errDiv.innerText = "❌ 無法連接資料庫 (Excel)，請檢查網路或稍後再試！";
+    } else if (data && !data.error) {
         document.getElementById('login-modal').style.display = 'none';
         currentUser = data;
         startSinglePlayer();
@@ -678,7 +713,8 @@
     currentUser = { classStr: tempClass, nameStr: tempName, carIdx: idx, dist: 0, attempts: 0, correct: 0 };
     startSinglePlayer();
     
-    await gas_fetch({action: 'REGISTER', classStr: tempClass, nameStr: tempName, carIdx: idx});
+    // 註冊時同樣關閉本機備用庫
+    await gas_fetch({action: 'REGISTER', classStr: tempClass, nameStr: tempName, carIdx: idx}, false);
   }
 
   function updateProgressBackend(distAdded, isCorrect) {
