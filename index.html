@@ -61,23 +61,21 @@
     }
 
     .top3-board {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
+      display: flex;
+      justify-content: center;
+      gap: 20px;
       background: rgba(255, 255, 255, 0.95);
       border: 3px solid #feca57;
       border-radius: 20px;
       padding: 6px 20px;
-      display: flex;
-      gap: 20px;
-      z-index: 10;
+      margin-bottom: 1vh;
       box-shadow: 0 4px 10px rgba(0,0,0,0.15);
       font-size: clamp(0.8rem, 1.2vw, 1rem);
       font-weight: 900;
       color: #576574;
-      pointer-events: none;
+      flex: none;
     }
+    
     .top3-item {
       display: flex;
       align-items: center;
@@ -316,8 +314,10 @@
     <div class="hud" id="hud-txt">請選擇遊戲模式</div>
   </header>
 
+  <!-- 放置在馬路正上方的排行榜 -->
+  <div id="leaderboard" class="top3-board" style="display: none;"></div>
+  
   <div class="track-section">
-    <div id="leaderboard" class="top3-board" style="display: none;"></div>
     <canvas id="trackCanvas"></canvas>
   </div>
 
@@ -331,20 +331,10 @@
       <div class="math-board" id="q-0"></div>
       <div class="p-feedback" id="fb-0"></div>
       <div class="mini-numpad">
-        <button class="m-btn" onclick="press(0,'7')">7</button>
-        <button class="m-btn" onclick="press(0,'8')">8</button>
-        <button class="m-btn" onclick="press(0,'9')">9</button>
-        <button class="m-btn m-btn-del" onclick="press(0,'DEL')">⌫</button>
-        <button class="m-btn" onclick="press(0,'4')">4</button>
-        <button class="m-btn" onclick="press(0,'5')">5</button>
-        <button class="m-btn" onclick="press(0,'6')">6</button>
-        <button class="m-btn m-btn-clr" onclick="press(0,'CLR')">C</button>
-        <button class="m-btn" onclick="press(0,'1')">1</button>
-        <button class="m-btn" onclick="press(0,'2')">2</button>
-        <button class="m-btn" onclick="press(0,'3')">3</button>
-        <button class="m-btn btn-next" onclick="nextField(0)">▶</button>
-        <button class="m-btn m-btn-zero" onclick="press(0,'0')">0</button>
-        <button class="m-btn m-btn-go" onclick="submitAns(0)">🚀</button>
+        <button class="m-btn" onclick="press(0,'7')">7</button><button class="m-btn" onclick="press(0,'8')">8</button><button class="m-btn" onclick="press(0,'9')">9</button><button class="m-btn m-btn-del" onclick="press(0,'DEL')">⌫</button>
+        <button class="m-btn" onclick="press(0,'4')">4</button><button class="m-btn" onclick="press(0,'5')">5</button><button class="m-btn" onclick="press(0,'6')">6</button><button class="m-btn m-btn-clr" onclick="press(0,'CLR')">C</button>
+        <button class="m-btn" onclick="press(0,'1')">1</button><button class="m-btn" onclick="press(0,'2')">2</button><button class="m-btn" onclick="press(0,'3')">3</button><button class="m-btn btn-next" onclick="nextField(0)">▶</button>
+        <button class="m-btn m-btn-zero" onclick="press(0,'0')">0</button><button class="m-btn m-btn-go" onclick="submitAns(0)">🚀</button>
       </div>
     </div>
 
@@ -398,6 +388,7 @@
     <div class="modal-content">
       <h2>🏁 遊戲模式選擇</h2>
       <p style="color: #576574; font-weight: bold; margin-bottom: 10px;">請選擇您要進行的遊戲模式</p>
+      <!-- 加入檢查連線功能 -->
       <button class="btn-large" onclick="checkConnectionAndOpenLogin()">👤 單人模式</button>
       <button class="btn-large secondary" onclick="startMultiplayer()">👥 四人同機競賽</button>
       <div style="font-size: 0.8rem; color: #a4b0be; margin-top: 10px;">
@@ -529,6 +520,7 @@
   function addFrac(f1, f2) { return simplify({ n: f1.n * f2.d + f2.n * f1.d, d: f1.d * f2.d }); }
   function subFrac(f1, f2) { return simplify({ n: f1.n * f2.d - f2.n * f1.d, d: f1.d * f2.d }); }
 
+  // 加入整數減分數相關題型
   const rawQuestions = [
     "1/2 + 1/3", "3/4 - 1/6", "2/5 + 1/4", "5/8 - 1/2", "5/6 + 1/4", "7/8 - 1/4", "3/5 + 2/3", "9/10 - 1/4",
     "1_1/2 + 1/3", "2_1/4 + 1_1/3", "3_1/2 - 1_1/4", "2_1/5 - 1/2", "1_3/4 - 5/6", "3_1/3 - 1_1/2", "1/6 + 3/8", "3/4 + 5/6",
@@ -557,6 +549,7 @@
 
   let players = [];
   let singleTrackOpponents = [];
+  let globalTop3 = []; // 專門儲存真正的全服前三名
 
   const trackCanvas = document.getElementById('trackCanvas');
   const tCtx = trackCanvas.getContext('2d');
@@ -639,7 +632,7 @@
     btn.innerText = "🔗 連線資料庫中 ⏳...";
     btn.disabled = true;
 
-    // 關閉 allowFallback (第二個參數傳入 false)，強制要求必須連上 GAS
+    // 關閉 allowFallback，強制要求必須連上 GAS
     let test = await gas_fetch({action: 'GET_TRACK'}, false);
     
     if (test && test.networkError) {
@@ -655,6 +648,8 @@
     } else {
         btn.innerText = origText;
         btn.disabled = false;
+        btn.style.background = "";
+        btn.style.boxShadow = "";
         openLoginModal();
     }
   }
@@ -688,7 +683,7 @@
     btn.disabled = true;
     btn.innerText = "連線中 ⏳...";
     
-    // 登入階段也關閉自動備用資料庫，確保一定能連上 EXCEL
+    // 登入時不允許 fallback
     let data = await gas_fetch({action: 'LOGIN', classStr: tempClass, nameStr: tempName}, false);
     
     btn.disabled = false;
@@ -713,7 +708,7 @@
     currentUser = { classStr: tempClass, nameStr: tempName, carIdx: idx, dist: 0, attempts: 0, correct: 0 };
     startSinglePlayer();
     
-    // 註冊時同樣關閉本機備用庫
+    // 註冊時不允許 fallback
     await gas_fetch({action: 'REGISTER', classStr: tempClass, nameStr: tempName, carIdx: idx}, false);
   }
 
@@ -740,6 +735,13 @@
       let sorted = [...db].sort((a, b) => b.dist - a.dist);
       let myIdx = sorted.findIndex(u => u.classStr === currentUser.classStr && u.nameStr === currentUser.nameStr);
       
+      // 更新真正的全服前三名
+      globalTop3 = sorted.slice(0, 3).map(u => ({
+          name: `${u.classStr} ${u.nameStr}`,
+          dist: u.dist,
+          isMe: (u.classStr === currentUser.classStr && u.nameStr === currentUser.nameStr)
+      }));
+
       let trackData = sorted;
       if (sorted.length > 9 && myIdx !== -1) {
           let start = Math.max(0, myIdx - 4);
@@ -758,7 +760,7 @@
               name: `${u.classStr} ${u.nameStr}`,
               dist: u.dist,
               img: preloadedImgs[u.carIdx],
-              yOffset: (i * ((trackCanvas.height - 40) / Math.max(1, trackData.length-1 || 1))) - (trackCanvas.height/2 - 20),
+              yOffset: 0, // 單人模式會在 renderTrack 重新計算
               isMe: (u.classStr === currentUser.classStr && u.nameStr === currentUser.nameStr)
           };
       });
@@ -804,11 +806,10 @@
   }
 
   function createPlayerObj(id, name, color, img) {
-      // 統一調整初始 Y 偏移量
       return { 
         id: id, name: name, color: color, img: img, 
         dist: 0, visualDist: 0, qIdx: Math.floor(Math.random() * rawQuestions.length), 
-        yOffset: (id * 18) - 25 - 3, finished: false, rank: 0, 
+        yOffset: 0, finished: false, rank: 0, 
         tokens: [], pastLines: [], stepState: 'SELECT', expectedAns: {n:0,d:1}, 
         leftBound: -1, rightBound: -1, inputData: {}, activeField: 'w', currentOp: '', origA: null, origB: null 
       };
@@ -965,6 +966,7 @@
       let p1Str = p.tokens[p.leftBound];
       let p2Str = p.tokens[p.rightBound];
       
+      // 整數減分數偵測
       if (op === '-' && !p1Str.includes('/') && p2Str.includes('/')) {
         p.stepState = 'INPUT_INT_TO_FRAC'; 
         p.inputData = { w: '', n: '', d: '' }; 
@@ -1206,7 +1208,7 @@
           tCtx.fillStyle = (r % 2 === 0) ? "#333" : "#fff"; tCtx.fillRect(finishX + 20, ySquare, 20, (h-40)/5);
         }
     } else {
-        // 修改單人模式馬路長度為 15m
+        // 單人模式馬路長度為 15m
         trackMaxDist = 15; 
         
         // 找出所有車輛中跑最遠的距離 (第一名)
@@ -1217,7 +1219,7 @@
             }
         });
 
-        // 讓第一名始終保持在畫面最右側 (距離右邊界僅留 0.5m 的相對位置)，增加成就感！
+        // 讓第一名始終保持在畫面最右側 (距離右邊界僅留 0.5m)，增加成就感
         if (maxVisualDist > (trackMaxDist - 0.5)) {
              startDist = maxVisualDist - (trackMaxDist - 0.5);
         }
@@ -1243,12 +1245,10 @@
 
     if (gameMode === 'MULTI') {
         renderList = players;
-        // 動態計算 yOffset，平均分佈在 4 條車道上，確保車子在馬路範圍內
+        // 平均分佈在 4 條車道上
         players.forEach((p, i) => {
             let laneHeight = (h - 40) / 4;
-            // 每一條車道的底部 Y 座標，稍微向上偏移 (-5) 來置中車輛
             let laneBottom = 30 + (i + 1) * laneHeight - 5; 
-            // 覆寫玩家的 Y 軸偏移量
             p.yOffset = laneBottom - carH + 5 - baseCenterY;
         });
     } else if (gameMode === 'SINGLE') {
@@ -1258,8 +1258,7 @@
                 name: `${currentUser.classStr} ${currentUser.nameStr}`,
                 dist: players[0].dist,
                 img: players[0].img,
-                // 單人模式玩家Y座標再次 -10 變成 -23
-                yOffset: -23, 
+                yOffset: -23, // 玩家調整高度為 -23
                 isMe: true
             });
         }
@@ -1271,7 +1270,7 @@
                 players[0].yOffset = -23; 
                 return players[0];
             } else {
-                const newYOffset = (opponentCount % 2 === 0) ? -51 : 5;
+                const newYOffset = (opponentCount % 2 === 0) ? -51 : 5; // 對手調整為 -51 和 5
                 opponentCount++;
                 return {
                     isOpponent: true, name: c.name, dist: c.dist, visualDist: c.dist, 
@@ -1283,23 +1282,33 @@
 
     // 更新排行榜 (單人與多人模式共用)
     let lbDiv = document.getElementById('leaderboard');
-    if (renderList.length > 0) {
+    const medals = ['🥇', '🥈', '🥉'];
+    let html = '';
+
+    if (gameMode === 'SINGLE' && globalTop3.length > 0) {
         lbDiv.style.display = 'flex';
-        // 抓出前三名
-        let sortedForLb = [...renderList].sort((a, b) => b.visualDist - a.visualDist).slice(0, 3);
-        const medals = ['🥇', '🥈', '🥉'];
-        let html = '';
+        let displayTop3 = globalTop3.map(r => {
+            let dispDist = r.dist;
+            if (r.isMe && players[0]) dispDist = players[0].visualDist;
+            return { ...r, dispDist: dispDist };
+        });
         
-        // 將前三名的陣列反轉，變成 [第3名, 第2名, 第1名]
+        displayTop3.sort((a, b) => b.dispDist - a.dispDist);
+        
+        // 反轉陣列，由左至右顯示 3、2、1 名
+        displayTop3.reverse().forEach((r, reversedIdx) => {
+            let originalIdx = displayTop3.length - 1 - reversedIdx;
+            let rName = r.isMe ? "⭐ 我 ⭐" : r.name;
+            html += `<div class="top3-item"><span style="font-size:1.2rem;">${medals[originalIdx]}</span> ${rName} (${Math.floor(r.dispDist)}m)</div>`;
+        });
+        lbDiv.innerHTML = html;
+    } else if (gameMode === 'MULTI' && renderList.length > 0) {
+        lbDiv.style.display = 'flex';
+        let sortedForLb = [...renderList].sort((a, b) => b.visualDist - a.visualDist).slice(0, 3);
+        // 反轉陣列，由左至右顯示 3、2、1 名
         sortedForLb.reverse().forEach((r, reversedIdx) => {
-            let rName = r.name;
-            if (gameMode === 'SINGLE' && !r.isOpponent) rName = "⭐ 我 ⭐";
-            
-            // 計算原本的排名 (0=第一, 1=第二, 2=第三)
-            // 反轉後長度為 n，則原本的 index = n - 1 - reversedIdx
             let originalIdx = sortedForLb.length - 1 - reversedIdx;
-            
-            html += `<div class="top3-item"><span style="font-size:1.2rem;">${medals[originalIdx]}</span> ${rName} (${Math.floor(r.visualDist)}m)</div>`;
+            html += `<div class="top3-item"><span style="font-size:1.2rem;">${medals[originalIdx]}</span> ${r.name} (${Math.floor(r.visualDist)}m)</div>`;
         });
         lbDiv.innerHTML = html;
     } else {
